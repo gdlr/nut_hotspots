@@ -1,0 +1,35 @@
+---
+title: "bio_oracle_nutrient_test"
+author: "Gabriel De La Rosa"
+date: "7/15/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(raster)
+library(tidyverse)
+library(sdmpredictors)
+library(here)
+```
+
+### This script pulls Bio Oracle data from the `sdmpredictors` package
+
+```{r}
+# Explore these datasets...
+
+datasets <- list_datasets(marine = TRUE, terrestrial = FALSE)
+layers <- list_layers(datasets)
+
+# Download the bio oracle nitrate data:
+BO_nitrate <- load_layers("BO_nitrate", equalarea = TRUE)
+# And save it.
+writeRaster(BO_nitrate, here("data", "BO_nitrate.tif"))
+ 
+
+# Repeat for phosphate
+BO_phosphate <- load_layers("BO_phosphate", equalarea = TRUE)
+writeRaster(BO_phosphate, here("data", "BO_phosphate.tif"))
+```
+
