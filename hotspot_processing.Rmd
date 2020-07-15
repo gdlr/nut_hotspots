@@ -142,7 +142,7 @@ if(!file.exists(here("cropped_rasters", "OHI_nutrient_pollution_reproject.tif"))
   raster::writeRaster(nut_mask, here("cropped_rasters", "nut_mask.tif"))
   # Read this in again...
   nut_mask <- raster(here("cropped_rasters", "nut_mask.tif"))
-  # Reproject the masked raster to x, our base raster with a 0.2 degree resolution
+  # Reproject the masked raster to our crs
   nut_reproject <- projectRaster(nut_mask, crs = proj, progress = "text")
   # Save the reprojected layer
   writeRaster(nut_reproject, here("cropped_rasters", "OHI_nutrient_pollution_reproject.tif"))
@@ -203,9 +203,10 @@ if(!file.exists(here("cropped_rasters", "nitro_mean_2dg_2013.tif"))){
   # Then, write raster
   writeRaster(nitro_mean_resample_mask, here("cropped_rasters", "nitro_mean_2dg_2013.tif"))
 }
+```
 
+```{r}
 nitro_mean <- raster(here("cropped_rasters", "nitro_mean_2dg_2013.tif"))
-
 plot(nitro_mean, nut_resample_mask)
 ```
 
@@ -250,9 +251,13 @@ if(!file.exists(here("cropped_rasters", "phos_mean_2dg_2013.tif"))){
   # Then, write raster
   writeRaster(phos_mean_resample_mask, here("cropped_rasters", "phos_mean_2dg_2013.tif"))
 }
+```
 
+```{r}
 phos_mean <- raster(here("cropped_rasters", "phos_mean_2dg_2013.tif"))
+```
 
+```{r}
 plot(phos_mean)
 plot(US_crop, add = TRUE, col = "grey80")
 ```
@@ -261,25 +266,63 @@ plot(US_crop, add = TRUE, col = "grey80")
 
 I need to check and see if this is legit...
 ```{r}
-inter <- function(file){
-  r <- file             # Load in the raster
-  # grid <- raster::projectExtent(r, res = 0.2)
-  xy <- data.frame(xyFromCell(r, 1:ncell(r))) #create a df of the grid
-  v = getValues(r) # and a list of the values..
-  tmpdf <- cbind(xy, v)%>%filter(!is.na(v)) # Bind them together
-  mg <- gstat(id = "v", formula = v~1, locations = ~x+y, data=tmpdf,
-            nmax=7, set=list(idp = 2)) # Create a model (power function = 2)
-  z <- interpolate(r, mg, progress='text')
+if(!file.exists(here("cropped_rasters", "phos_int_mask.tif"))){
+  inter <- function(file){
+    r <- file             # Load in the raster
+    # grid <- raster::projectExtent(r, res = 0.2)
+    xy <- data.frame(xyFromCell(r, 1:ncell(r))) #create a df of the grid
+    v = getValues(r) # and a list of the values..
+    tmpdf <- cbind(xy, v)%>%filter(!is.na(v)) # Bind them together
+    mg <- gstat(id = "v", formula = v~1, locations = ~x+y, data=tmpdf,
+              nmax=7, set=list(idp = 2)) # Create a model (power function = 2)
+    z <- interpolate(r, mg, progress='text')
+  }
+  
+  # Run this for both phosphate and nitrate
+  phos_inter <- inter(phos_mean)
+  nitro_inter <- inter(nitro_mean)
+  
+  # Mask the values to the US EEZ: 
+  phos_int_mask <- mask_fx(phos_inter)
+  nitro_int_mask <- mask_fx(nitro_inter)
+  
+  writeRaster(phos_int_mask, here("cropped_rasters", "phos_int_mask.tif"))
+  writeRaster(nitro_int_mask, here("cropped_rasters", "nitro_int_mask.tif"))
 }
+```
 
-# Run this for both phosphate and nitrate
-phos_inter <- inter(phos_mean)
-nitro_inter <- inter(nitro_mean)
 
-# Mask the values to the US EEZ: 
-phos_int_mask <- mask_fx(phos_inter)
-nitro_int_mask <- mask_fx(nitro_inter)
+## Bio Oracle Data:
 
-writeRaster(phos_int_mask, here("cropped_rasters", "phos_int_mask.tif"))
-writeRaster(nitro_int_mask, here("cropped_rasters", "nitro_int_mask.tif"))
+I've found finer resolution data from BioOracle. I'm gonna repeat the same analysis with this:
+
+these are originally 0.083 degree cells
+This is already in WGS84
+
+Start with phosphorous:
+```{r}
+if(!file.exists(here("cropped_rasters", "BO_phos_2dg.tif"))){
+  # Load phosphate data in
+  bo_phos <- raster(here("data", "BO_phosphate.tif"))
+  # Reproject to 2 degree
+  bo_phos_2dg <- projectRaster(bo_phos, x, fun = "mean")
+  # crop and mask
+  bo_phos_mask <- mask_fx(bo_phos_2dg)
+  # Save it
+  writeRaster(bo_phos_mask, here("cropped_rasters", "BO_phos_2dg.tif"))
+}
+```
+
+Then nitrogen:
+```{r}
+if(!file.exists(here("cropped_rasters", "BO_nit_2dg.tif"))){
+  # Load phosphate data in
+  bo_nit <- raster(here("data", "BO_phosphate.tif"))
+  # Reproject to 2 degree
+  bo_nit_2dg <- projectRaster(bo_nit, x, fun = "mean")
+  # crop and mask
+  bo_nit_mask <- mask_fx(bo_nit_2dg)
+  # Save it
+  writeRaster(bo_nit_mask, here("cropped_rasters", "BO_nit_2dg.tif"))
+}
 ```

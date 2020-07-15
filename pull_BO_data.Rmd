@@ -19,17 +19,17 @@ library(here)
 ```{r}
 # Explore these datasets...
 
-datasets <- list_datasets(marine = TRUE, terrestrial = FALSE)
-layers <- list_layers(datasets)
+#datasets <- list_datasets(marine = TRUE, terrestrial = FALSE)
+#layers <- list_layers(datasets)
 
 # Download the bio oracle nitrate data:
-BO_nitrate <- load_layers("BO_nitrate", equalarea = TRUE)
+BO_nitrate <- load_layers("BO_nitrate", equalarea = FALSE)
 # And save it.
-writeRaster(BO_nitrate, here("data", "BO_nitrate.tif"))
+writeRaster(BO_nitrate, here("data", "BO_nitrate.tif"), overwrite = TRUE)
  
 
 # Repeat for phosphate
-BO_phosphate <- load_layers("BO_phosphate", equalarea = TRUE)
-writeRaster(BO_phosphate, here("data", "BO_phosphate.tif"))
+BO_phosphate <- load_layers("BO_phosphate", equalarea = FALSE)
+writeRaster(BO_phosphate, here("data", "BO_phosphate.tif"), overwrite = TRUE)
 ```
 
