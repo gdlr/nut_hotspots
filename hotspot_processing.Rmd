@@ -317,12 +317,25 @@ Then nitrogen:
 ```{r}
 if(!file.exists(here("cropped_rasters", "BO_nit_2dg.tif"))){
   # Load phosphate data in
-  bo_nit <- raster(here("data", "BO_phosphate.tif"))
+  bo_nit <- raster(here("data", "BO_nitrate.tif"))
   # Reproject to 2 degree
   bo_nit_2dg <- projectRaster(bo_nit, x, fun = "mean")
   # crop and mask
   bo_nit_mask <- mask_fx(bo_nit_2dg)
   # Save it
-  writeRaster(bo_nit_mask, here("cropped_rasters", "BO_nit_2dg.tif"))
+  writeRaster(bo_nit_mask, here("cropped_rasters", "BO_nit_2dg.tif"), overwrite = TRUE)
 }
 ```
+
+```{r}
+bo_nit_mask <- raster(here("cropped_rasters", "BO_nit_2dg.tif"))
+bo_phos_mask <- raster(here("cropped_rasters", "BO_phos_2dg.tif"))
+```
+
+```{r}
+plot(bo_nit_mask)
+```
+```{r}
+plot(bo_phos_mask)
+```
+
