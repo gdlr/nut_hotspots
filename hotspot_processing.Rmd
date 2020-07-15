@@ -1,0 +1,285 @@
+---
+title: "data_exploration"
+author: "Gabriel De La Rosa"
+date: "7/1/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(raster)
+library(sf)
+library(here)
+library(readxl)
+library(fasterize)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(rgeos)
+library(gstat)
+```
+
+### Set Projections and base rasters:
+```{r}
+# This is a WGS84 standard projection
+proj <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+
+# This is a 0.2 degree resolution raster for the whole globe...
+x <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, res=0.2, crs="+proj=longlat +datum=WGS84")
+
+# Make a US basemap:
+
+if(!file.exists(here("cropped_rasters", "US_mainland.shp"))){
+  # Read in country data
+  US <- ne_countries(type = "countries", country = "united states of america", scale = 50)
+  # Convert it to an sf object
+  us_sf <- st_as_sf(US)
+  # Crop to the EEZ bounding box (returns only mainland)
+  US_crop <- st_crop(us_sf, us_eez)
+  # Save it for later use
+  write_sf(US_crop, here("cropped_rasters", "US_mainland.shp"))
+}
+
+US_crop <- read_sf(here("cropped_rasters", "US_mainland.shp"))
+```
+
+
+```{r}
+# This is a function to crop and mask a raster to the US EEZ.
+mask_fx <- function(object){
+  cropped <- raster::crop(object, us_eez)
+  mask <- raster::mask(cropped, us_eez)
+  return(mask)
+}
+```
+
+
+### Create Area of Interest: US Mainland EEZ
+
+``` {r}
+if(!file.exists(here("cropped_rasters", "us_eez.shp"))){
+  # Read in eez data. This is already in the proper projection.
+  eez <- read_sf(here("data", "World_EEZ_v11_20191118"), layer = "eez_v11")
+  
+  # Filter it down
+  us_eez <- eez %>% 
+    filter(SOVEREIGN1 == "United States") %>% 
+    filter(TERRITORY1 == "United States") %>% 
+    filter(MRGID == "8456") %>% 
+    dplyr::select(TERRITORY1)
+  
+  # Save just the US...
+  sf::write_sf(us_eez, here("cropped_rasters", "us_eez.shp"))
+}
+  
+# We can read in our processed files here to save time later:
+us_eez <- read_sf(here("cropped_rasters"), layer = "us_eez")
+
+# Convert this to an sp df...do I need this?
+us_sp <- as(us_eez, 'Spatial')
+```
+
+
+### Eutrophication and hypoxia data from WOI
+Read in eutrophication and hypoxia data:
+This is point data for eutrophic and hypoxic regions in the US.
+This is in WGS84 projection originally.
+
+```{r}
+if(!file.exists(here("cropped_rasters", "US_hypox_1km_rast.tif"))){
+  #-------------
+  # Read this in as a shapefile
+  #-------------
+  # Read Data
+  eut_data<- read_xls(here("data", "wri_eutro_hypox", "wri_eutrophic_hypoxic_dataset_2011-03.xls"))
+  # Convert it to spatial:
+  eut_sf <- sf::st_as_sf(eut_data, coords = c("Long", "Lat"), crs = proj)
+  # Crop to the US EEZ
+  eut_US <- sf::st_crop(eut_sf, us_eez)
+  # Write as cropped shapefile
+  sf::write_sf(eut_US, here("cropped_rasters", "US_hypox.shp"))
+  ##------------
+  ## Then, convert it to a raster
+  ##------------
+  # First, get rid of the improved locations:
+  eut_current <- eut_US %>% 
+    filter(Classification %in% c("Hypoxic", "Eutrophic", "eutrophic")) %>% 
+    dplyr::select(ID)
+  # Put this into a 1 degree grid...
+  eut_raster <- rasterize(eut_current, x, fun = 'count')
+  # Crop it to the US EEZ...
+  eut_us_crop <- raster::crop(eut_raster, us_eez)
+  # Mask it to the US EEZ...
+  eut_us_mask <- raster::mask(eut_us_crop, us_eez, snap = "out")
+  # Save this raster
+  writeRaster(eut_us_crop, here("cropped_rasters", "US_hypox_crop.tif"))
+  writeRaster(eut_us_mask, here("cropped_rasters", "US_hypox_rast.tif"))
+}
+
+eut_us_crop <- raster(here("cropped_rasters", "US_hypox_crop.tif"))
+eut_us_mask <- raster(here("cropped_rasters", "US_hypox_1km_rast.tif"))
+plot(eut_us_crop)
+
+```
+
+
+### OHI Nutrient Data
+These are the relative intensity of fertilizer pollution globally.
+This is originally a mollewide projection.
+
+```{r}
+# This reads in the OHI raster, reprojects it into WGS84, then resamples it to 2degree resolution.
+
+if(!file.exists(here("cropped_rasters", "OHI_nutrient_pollution_reproject.tif"))){
+  # Read in data
+  nut_raw <- raster(here("data", "ohi_2013", "nutrient_pollution_2013_raw.tif"))
+  # Crop the raster to US bounding box
+  nut_crop <- raster::crop(nut_raw, us_eez_moll)
+  # Mask the raster to just the US EEZ
+  nut_mask <- raster::mask(nut_crop, us_eez_moll, snap = "out")
+  # Then, save the masked raster
+  raster::writeRaster(nut_mask, here("cropped_rasters", "nut_mask.tif"))
+  # Read this in again...
+  nut_mask <- raster(here("cropped_rasters", "nut_mask.tif"))
+  # Reproject the masked raster to x, our base raster with a 0.2 degree resolution
+  nut_reproject <- projectRaster(nut_mask, crs = proj, progress = "text")
+  # Save the reprojected layer
+  writeRaster(nut_reproject, here("cropped_rasters", "OHI_nutrient_pollution_reproject.tif"))
+}
+
+nut_reproject <- raster(here("cropped_rasters", "OHI_nutrient_pollution_reproject.tif"))
+
+# This resamples the raster to 2 degrees, using a bilinear method
+if(!file.exists(here("cropped_rasters", "OHI_nut_resample_2dg.tif"))){
+  nut_resample <- raster::resample(nut_reproject, x, method = "bilinear", progress = "text")
+  nut_resample_mask <- mask_fx(nut_resample)
+  writeRaster(nut_resample_mask, here("cropped_rasters", "OHI_nut_resample_2dg.tif"))
+}
+
+nut_resample_mask <- raster(here("cropped_rasters", "OHI_nut_resample_2dg.tif"))
+
+plot(nut_resample_mask)
+```
+
+
+### Nitrate from Halley's paper.
+This is originally in wgs84.
+This is super low resolution (1 degree.)
+These just include the mean of 0-10m measurements.
+
+#### DANGER DANGER THIS LOOKS LIKE IT HAS MORE RESOLUTION THAN IT ACTUALLY DOES
+
+```{r, eval = FALSE}
+# Let's just use this...
+if(!file.exists(here("cropped_rasters", "nitro_mean_2dg_2013.tif"))){
+  # Read it in as a raster...
+  fall_nut <- raster(here("data", "frazier_nut", "avg_nitrate_Fall.tif"))
+  # Crop and mask it to the US EEZ:
+  fall_nut_mask <- mask_fx(fall_nut)
+  # Repeat for spring, summer, fall
+  # SPRING
+  # Read it in as a raster...
+  spring_nut <- raster(here("data", "frazier_nut", "avg_nitrate_Spring.tif"))
+  # Crop and mask it to the US EEZ:
+  spring_nut_mask <- mask_fx(spring_nut)
+  # SUMMER
+  summer_nut <- raster(here("data", "frazier_nut", "avg_nitrate_Summer.tif"))
+  # Crop and mask it to the US EEZ:
+  summer_nut_mask <- mask_fx(summer_nut)
+  # WINTER
+  winter_nut <- raster(here("data", "frazier_nut", "avg_nitrate_Winter.tif"))
+  # Crop and mask it to the US EEZ:
+  winter_nut_mask <- mask_fx(winter_nut)
+  
+  # Stack these rasters:
+  nitro_stack <- raster::stack(fall_nut_mask, spring_nut_mask, summer_nut_mask, winter_nut_mask)
+   # Then, find the mean...
+  nut_mean <- raster::calc(nitro_stack, fun = mean)
+  # Then, resample down to the 0.2 degree resolution
+  nitro_mean_resample <- raster::resample(nut_mean, x)
+  # Then, recrop and mask:
+  nitro_mean_resample_mask <- mask_fx(nitro_mean_resample)
+  # Then, write raster
+  writeRaster(nitro_mean_resample_mask, here("cropped_rasters", "nitro_mean_2dg_2013.tif"))
+}
+
+nitro_mean <- raster(here("cropped_rasters", "nitro_mean_2dg_2013.tif"))
+
+plot(nitro_mean, nut_resample_mask)
+```
+
+
+### Phosphate from Halley's paper.
+This is originally in wgs84.
+This is super low resolution (1 degree.)
+These just include the mean of 0-10m measurements.
+
+#### DANGER DANGER THIS LOOKS LIKE IT HAS MORE RESOLUTION THAN IT ACTUALLY DOES
+
+```{r, eval = FALSE}
+# Let's just use this...
+if(!file.exists(here("cropped_rasters", "phos_mean_2dg_2013.tif"))){
+  # Read it in as a raster...
+  fall_phos <- raster(here("data", "frazier_nut", "avg_phosphate_Fall.tif"))
+  # Crop and mask it to the US EEZ:
+  fall_phos_mask <- mask_fx(fall_phos)
+  # Repeat for spring, summer, fall
+  # SPRING
+  # Read it in as a raster...
+  spring_phos <- raster(here("data", "frazier_nut", "avg_phosphate_Spring.tif"))
+  # Crop and mask it to the US EEZ:
+  spring_phos_mask <- mask_fx(spring_phos)
+  # SUMMER
+  summer_phos <- raster(here("data", "frazier_nut", "avg_phosphate_Summer.tif"))
+  # Crop and mask it to the US EEZ:
+  summer_phos_mask <- mask_fx(summer_phos)
+  # WINTER
+  winter_phos <- raster(here("data", "frazier_nut", "avg_phosphate_Winter.tif"))
+  # Crop and mask it to the US EEZ:
+  winter_phos_mask <- mask_fx(winter_phos)
+  
+  # Stack these rasters:
+  phos_stack <- raster::stack(fall_phos_mask, spring_phos_mask, summer_phos_mask, winter_phos_mask)
+   # Then, find the mean...
+  phos_mean <- raster::calc(phos_stack, fun = mean)
+  # Then, resample down to the 0.2 degree resolution
+  phos_mean_resample <- raster::resample(phos_mean, x, method = )
+  # Then, recrop and mask:
+  phos_mean_resample_mask <- mask_fx(phos_mean_resample)
+  # Then, write raster
+  writeRaster(phos_mean_resample_mask, here("cropped_rasters", "phos_mean_2dg_2013.tif"))
+}
+
+phos_mean <- raster(here("cropped_rasters", "phos_mean_2dg_2013.tif"))
+
+plot(phos_mean)
+plot(US_crop, add = TRUE, col = "grey80")
+```
+
+## Okay, there's missing data in these rasters, especially for shoreline values. I'm going to interpolate using an Inverse Distance Weighting function and methods/code from (OHI)[http://ohi-science.org/ohiprep_v2019/globalprep/prs_oa/v2017/create_oa_layer.html].
+
+I need to check and see if this is legit...
+```{r}
+inter <- function(file){
+  r <- file             # Load in the raster
+  # grid <- raster::projectExtent(r, res = 0.2)
+  xy <- data.frame(xyFromCell(r, 1:ncell(r))) #create a df of the grid
+  v = getValues(r) # and a list of the values..
+  tmpdf <- cbind(xy, v)%>%filter(!is.na(v)) # Bind them together
+  mg <- gstat(id = "v", formula = v~1, locations = ~x+y, data=tmpdf,
+            nmax=7, set=list(idp = 2)) # Create a model (power function = 2)
+  z <- interpolate(r, mg, progress='text')
+}
+
+# Run this for both phosphate and nitrate
+phos_inter <- inter(phos_mean)
+nitro_inter <- inter(nitro_mean)
+
+# Mask the values to the US EEZ: 
+phos_int_mask <- mask_fx(phos_inter)
+nitro_int_mask <- mask_fx(nitro_inter)
+
+writeRaster(phos_int_mask, here("cropped_rasters", "phos_int_mask.tif"))
+writeRaster(nitro_int_mask, here("cropped_rasters", "nitro_int_mask.tif"))
+```
