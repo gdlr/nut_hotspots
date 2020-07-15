@@ -29,6 +29,8 @@ We have the following data layers:
 * nitrate levels averaged through the year and interpolated to the coast
 * phosphate levels averaged through the year and interpolated to the coast
 
+* Also, now we have BioOracle nutrient data
+
 ```{r}
 # read in data
 # Eutrophic and hypoxic...This says 1km but it's actually 2 degrees.
@@ -39,6 +41,10 @@ nut_resample_mask <- raster(here("cropped_rasters", "OHI_nut_resample_2dg.tif"))
 nitro_int <- raster(here("cropped_rasters", "nitro_int_mask.tif"))
 # Average phosphate
 phos_int <- raster(here("cropped_rasters", "phos_int_mask.tif"))
+
+# BioOracle nutrients
+bo_nit <- raster(here("cropped_rasters", "BO_nit_2dg.tif"))
+bo_phos <- raster(here("cropped_rasters", "BO_phos_2dg.tif"))
 
 # US basemap
 us_base <- read_sf(here("cropped_rasters"), layer = "US_mainland")
@@ -85,7 +91,7 @@ For nitrate and phosphate, we want low natural nutrient areas. This is problemat
 
 ```{r}
 # write a function for this:
-nut_reclass <- function(object, pctl){
+nut_reclass <- function(object, pctl = 3){
   quantiles <- raster::quantile(object)
   reclass_list <- c(-Inf, quantiles[pctl], 1, quantiles[pctl], Inf, NA)
   reclass_matrix <- matrix(reclass_list,
@@ -206,3 +212,43 @@ active_cells(suitability_raster)
 
 
 In this analysis, there are pretty much an equal number of suitable cells between the two.
+
+
+
+### Bio Oracle nutrient data
+
+I'm going to repeat the analysis from above with this new data, see what changes.
+
+```{r}
+# This function returns the bottom 50% of the nutrient raster
+BO_nit_low <- nut_reclass(bo_nit)
+BO_phos_low <- nut_reclass(bo_phos)
+```
+
+# Plot the new nutrient rasters:
+```{r}
+plot(BO_nit_low)
+plot(BO_phos_low)
+
+
+```
+
+```{r}
+BO_low_suitability_raster <- ((BO_nit_low * BO_phos_low * nut_top_25) + eut_resample)
+
+plot(BO_low_suitability_raster, col = ramp)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.2)
+```
+# Then, I'll repeat for 
+```{r}
+BO_nit_high <- nut_reclass_upper(bo_nit)
+BO_phos_high <- nut_reclass_upper(bo_phos)
+
+
+BO_high_suitability_raster <- ((BO_nit_high * BO_phos_high * nut_top_25) + eut_resample)
+
+plot(BO_high_suitability_raster, col = ramp)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.2)
+```
+
+
