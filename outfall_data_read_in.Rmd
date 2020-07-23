@@ -1,0 +1,72 @@
+---
+title: "outfall_data"
+author: "Gabriel De La Rosa"
+date: "7/23/2020"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(raster)
+library(sf)
+library(tidyverse)
+library(here)
+library(rgdal)
+library(janitor)
+```
+
+## Exploring outfall data from NOAA:
+
+```{r}
+# See what layers the gdb file has...surprise, its just one.
+ogrListLayers(here("data", "outfall_data", "WastewaterOutfalls.gdb"))
+
+# Read this in as an sf object
+outfalls <- st_read(here("data", "outfall_data", "WastewaterOutfalls.gdb"), layer = "WastewaterOutfalls")
+
+outfalls
+```
+
+# Read in discharge data from the EPA
+```{r}
+# Read this in and select the discharge data. The permit number matches one in the oufall dataset, so we keep that too.
+n_discharge <- read_csv(here("data", "outfall_data", "2020_discharge_data_epa.csv"), skip = 3) %>% 
+  clean_names() %>% 
+  select(c("npdes_permit_number", "total_pounds_lb_yr", "avg_concentration_mg_l", "max_concentration_mg_l"))
+
+# Convert columns to numeric:
+n_discharge_num <- n_discharge %>% 
+  mutate(total_pounds_lb_yr = as.numeric(total_pounds_lb_yr)) %>% 
+  mutate(avg_concentration_mg_l = as.numeric(avg_concentration_mg_l)) %>% 
+  mutate(max_concentration_mg_l = as.numeric(max_concentration_mg_l))
+```
+
+```{r}
+p_discharge = read_csv(here("data", "outfall_data", "2020_phosphorous_epa.csv"), skip = 3) %>% 
+  clean_names() %>% 
+  select(c("npdes_permit_number", "total_pounds_lb_yr", "avg_concentration_mg_l", "max_concentration_mg_l"))
+
+
+p_discharge_num <- p_discharge %>% 
+  mutate(total_pounds_lb_yr = as.numeric(total_pounds_lb_yr)) %>% 
+  mutate(avg_concentration_mg_l = as.numeric(avg_concentration_mg_l)) %>% 
+  mutate(max_concentration_mg_l = as.numeric(max_concentration_mg_l))
+```
+
+# Join this with outfall data:
+
+```{r}
+# Join the discharge amounts to the outfall sf with geometry
+outfall_n_join <- inner_join(outfalls, n_discharge_num, by = c("PGM_SYS_ID" = "npdes_permit_number"))
+
+outfall_p_join <- inner_join(outfalls, p_discharge_num, by = c("PGM_SYS_ID" = "npdes_permit_number"))
+
+# Save this file for later use.
+st_write(outfall_n_join, dsn = here("data", "outfall_data", "outfall_nitrogen.shp"))
+
+# THIS GIVES AN ERROR...WHY??
+st_write(outfall_p_join, dsn = here("data", "outfall_data", "outfall_phosphorous.shp"))
+```
+

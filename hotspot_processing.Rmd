@@ -16,6 +16,7 @@ library(readxl)
 library(fasterize)
 library(rnaturalearth)
 library(rnaturalearthdata)
+library(rnaturalearthhires)
 library(rgeos)
 library(gstat)
 ```
@@ -28,20 +29,6 @@ proj <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
 # This is a 0.2 degree resolution raster for the whole globe...
 x <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, res=0.2, crs="+proj=longlat +datum=WGS84")
 
-# Make a US basemap:
-
-if(!file.exists(here("cropped_rasters", "US_mainland.shp"))){
-  # Read in country data
-  US <- ne_countries(type = "countries", country = "united states of america", scale = 50)
-  # Convert it to an sf object
-  us_sf <- st_as_sf(US)
-  # Crop to the EEZ bounding box (returns only mainland)
-  US_crop <- st_crop(us_sf, us_eez)
-  # Save it for later use
-  write_sf(US_crop, here("cropped_rasters", "US_mainland.shp"))
-}
-
-US_crop <- read_sf(here("cropped_rasters", "US_mainland.shp"))
 ```
 
 
@@ -78,6 +65,37 @@ us_eez <- read_sf(here("cropped_rasters"), layer = "us_eez")
 
 # Convert this to an sp df...do I need this?
 us_sp <- as(us_eez, 'Spatial')
+```
+
+US basemap and state lines:
+```{r}
+# Make a US basemap:
+
+if(!file.exists(here("cropped_rasters", "US_mainland.shp"))){
+  # Read in country data
+  US <- ne_countries(type = "countries", country = "united states of america", scale = 50)
+  # Convert it to an sf object
+  us_sf <- st_as_sf(US)
+  # Crop to the EEZ bounding box (returns only mainland)
+  US_crop <- st_crop(us_sf, us_eez)
+  # Save it for later use
+  write_sf(US_crop, here("cropped_rasters", "US_mainland.shp"))
+}
+
+US_crop <- read_sf(here("cropped_rasters", "US_mainland.shp"))
+
+# State Lines
+
+if(!file.exists(here("cropped_rasters", "US_states.shp"))){
+  # Read in country data
+  US_state <- ne_states(country = "united states of america")
+  # Convert it to an sf object
+  us_state_sf <- st_as_sf(US_state)
+  # Crop to the EEZ bounding box (returns only mainland)
+  US_state_crop <- st_crop(us_state_sf, us_eez)
+  # Save it for later use
+  write_sf(US_state_crop, here("cropped_rasters", "US_states.shp"))
+}
 ```
 
 

@@ -16,6 +16,8 @@ library(here)
 
 ### This script pulls Bio Oracle data from the `sdmpredictors` package
 
+This data is 5 arcmin resolution.
+
 ```{r}
 # Explore these datasets...
 

@@ -47,10 +47,11 @@ bo_nit <- raster(here("cropped_rasters", "BO_nit_2dg.tif"))
 bo_phos <- raster(here("cropped_rasters", "BO_phos_2dg.tif"))
 
 # US basemap
-us_base <- read_sf(here("cropped_rasters"), layer = "US_mainland")
+us_base <- read_sf(here("cropped_rasters"), layer = "US_states") %>% 
+  dplyr::select(featurecla)
 
 # Color ramp:
-ramp <- c("lightblue", "red", "red", "red")
+ramp <- c("blue", "red", "red", "red")
 ```
 
 
@@ -112,6 +113,7 @@ plot(us_base, col = 'grey80', add = TRUE)
 ```{r}
 # And phosphorous
 phos_low_50 <- nut_reclass(phos_int, 3)
+
 plot(phos_low_50)
 plot(us_base, col = 'grey80', add = TRUE)
 ```
@@ -129,6 +131,7 @@ eut_resample <- reclassify(eut_us_crop, cbind(NA, 0))
 
 ```{r}
 # Plot the observed eutrophication locations:
+
 plot(eut_resample)
 plot(us_base, col = 'grey80', add = TRUE)
 ```
@@ -247,8 +250,94 @@ BO_phos_high <- nut_reclass_upper(bo_phos)
 
 BO_high_suitability_raster <- ((BO_nit_high * BO_phos_high * nut_top_25) + eut_resample)
 
+# png(filename = here("map_img", "BO_high.png"), res = 100, width = 1000, height = 700, units = "px")
 plot(BO_high_suitability_raster, col = ramp)
-plot(us_base, col = 'grey80', add = TRUE, lwd = 0.2)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.1)
+# dev.off
 ```
 
 
+#### Some comparisons:
+
+
+Compare low suitability rasters
+```{r}
+plot(BO_low_suitability_raster)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.2)
+```
+
+```{r}
+plot(suitability_raster)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.2)
+```
+
+Compare nutrient layers:
+
+
+For nitrogen
+```{r}
+plot(BO_nit_low)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.2)
+```
+
+```{r}
+plot(nitro_low50)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.2)
+```
+
+For phosphorous
+
+```{r}
+plot(BO_phos_low)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.2)
+```
+
+```{r}
+plot(phos_low_50)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.2)
+```
+
+Suitability maps:
+
+```{r}
+#png(filename = here("map_img", "BO_low.png"), res = 100, width = 1000, height = 700, units = "px")
+plot(BO_low_suitability_raster, col = ramp)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.1)
+#dev.off
+```
+
+# What about just for the gulf?
+
+```{r}
+# read in gulf shapefile
+gulf <- read_sf(here("data", "marine_regions_shp", "gulf_shp"), layer = "gulf") %>% 
+  select(id)
+# Set just the extent of the gulf:
+gulf_ext <- extent(gulf)
+
+# Low gulf...
+#png(filename = here("map_img", "BO_gulf_low.png"), res = 100, width = 1000, height = 700, units = "px")
+plot(BO_low_suitability_raster, col = ramp, ext = gulf_ext)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.1, ext = gulf_ext)
+#dev.off
+
+# High gulf...
+png(filename = here("map_img", "BO_gulf_high.png"), res = 100, width = 1000, height = 700, units = "px")
+plot(BO_high_suitability_raster, col = ramp, ext = gulf_ext)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.1, ext = gulf_ext)
+dev.off
+```
+
+```{r}
+plot(BO_low_suitability_raster, col = ramp)
+plot(us_base, col = 'grey80', add = TRUE, lwd = 0.1)
+```
+
+
+
+```{r}
+plot(suitability_raster, col = ramp)
+plot(us_base, col = 'grey90', add = TRUE, lwd = 0.1)
+```
+
+![AC's suitability map](map_img/Suit.png)              
