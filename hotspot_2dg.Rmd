@@ -34,7 +34,7 @@ We have the following data layers:
 ```{r}
 # read in data
 # Eutrophic and hypoxic...This says 1km but it's actually 2 degrees.
-eut_us_crop <- raster(here("cropped_rasters", "US_hypox_1km_rast.tif"))
+eut_us_crop <- raster(here("cropped_rasters", "US_hypox_rast.tif"))
 # Nutrient pollution data
 nut_resample_mask <- raster(here("cropped_rasters", "OHI_nut_resample_2dg.tif"))
 # Average nitrate

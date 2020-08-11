@@ -64,9 +64,11 @@ outfall_n_join <- inner_join(outfalls, n_discharge_num, by = c("PGM_SYS_ID" = "n
 outfall_p_join <- inner_join(outfalls, p_discharge_num, by = c("PGM_SYS_ID" = "npdes_permit_number"))
 
 # Save this file for later use.
-st_write(outfall_n_join, dsn = here("data", "outfall_data", "outfall_nitrogen.shp"))
-
-# THIS GIVES AN ERROR...WHY??
-st_write(outfall_p_join, dsn = here("data", "outfall_data", "outfall_phosphorous.shp"))
+st_write(outfall_n_join, dsn = here("data", "outfall_data", "outfall_nitrogen.shp"), overwrite = TRUE, append = FALSE)
+st_write(outfall_p_join, dsn = here("data", "outfall_data", "outfall_phosphorous.shp"), overwrite = TRUE, append = FALSE)
 ```
 
+``` {r}
+write_csv(outfall_n_join, here("data", "outfall_data", "outfall_n.csv"))
+write_csv(outfall_p_join, here("data", "outfall_data", "outfall_p.csv"))
+```

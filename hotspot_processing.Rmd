@@ -27,16 +27,18 @@ library(gstat)
 proj <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
 
 # This is a 0.2 degree resolution raster for the whole globe...
-x <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, res=0.2, crs="+proj=longlat +datum=WGS84")
+x <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, res=0.2, crs= proj)
 
 ```
 
 
 ```{r}
 # This is a function to crop and mask a raster to the US EEZ.
-mask_fx <- function(object){
-  cropped <- raster::crop(object, us_eez)
-  mask <- raster::mask(cropped, us_eez)
+mask_fx <- function(object, shp = us_eez){
+  cropped <- raster::crop(object, shp)
+  raster <- raster::rasterize(shp, cropped, getCover = TRUE)
+  raster[raster == 0] <- NA
+  mask <- raster::mask(cropped, raster)
   return(mask)
 }
 ```
@@ -105,7 +107,7 @@ This is point data for eutrophic and hypoxic regions in the US.
 This is in WGS84 projection originally.
 
 ```{r}
-if(!file.exists(here("cropped_rasters", "US_hypox_1km_rast.tif"))){
+if(!file.exists(here("cropped_rasters", "US_hypox_rast.tif"))){
   #-------------
   # Read this in as a shapefile
   #-------------
@@ -127,17 +129,17 @@ if(!file.exists(here("cropped_rasters", "US_hypox_1km_rast.tif"))){
   # Put this into a 1 degree grid...
   eut_raster <- rasterize(eut_current, x, fun = 'count')
   # Crop it to the US EEZ...
-  eut_us_crop <- raster::crop(eut_raster, us_eez)
-  # Mask it to the US EEZ...
-  eut_us_mask <- raster::mask(eut_us_crop, us_eez, snap = "out")
+  eut_us_mask <- mask_fx(eut_raster)
   # Save this raster
-  writeRaster(eut_us_crop, here("cropped_rasters", "US_hypox_crop.tif"))
-  writeRaster(eut_us_mask, here("cropped_rasters", "US_hypox_rast.tif"))
+  writeRaster(eut_us_mask, here("cropped_rasters", "US_hypox_rast.tif"), overwrite = TRUE, append = FALSE)
 }
 
-eut_us_crop <- raster(here("cropped_rasters", "US_hypox_crop.tif"))
-eut_us_mask <- raster(here("cropped_rasters", "US_hypox_1km_rast.tif"))
-plot(eut_us_crop)
+
+# Mask removes cells that don't have a centroid in the EEZ. This isn't good...
+eut_us_mask <- raster(here("cropped_rasters", "US_hypox_rast.tif"))
+
+
+plot(eut_us_mask)
 
 ```
 
@@ -152,10 +154,10 @@ This is originally a mollewide projection.
 if(!file.exists(here("cropped_rasters", "OHI_nutrient_pollution_reproject.tif"))){
   # Read in data
   nut_raw <- raster(here("data", "ohi_2013", "nutrient_pollution_2013_raw.tif"))
+  # Convert the EEZ projection to Mollewide...
+  us_eez_moll <- st_transform(us_eez, crs(nut_raw))
   # Crop the raster to US bounding box
-  nut_crop <- raster::crop(nut_raw, us_eez_moll)
-  # Mask the raster to just the US EEZ
-  nut_mask <- raster::mask(nut_crop, us_eez_moll, snap = "out")
+  nut_crop <- mask_fx(nut_raw, us_eez_moll)
   # Then, save the masked raster
   raster::writeRaster(nut_mask, here("cropped_rasters", "nut_mask.tif"))
   # Read this in again...
@@ -355,5 +357,115 @@ plot(bo_nit_mask)
 ```
 ```{r}
 plot(bo_phos_mask)
+```
+
+## Outfall data:
+This data is the total estimated yearly input of either nitrogen or phosphorous from a point source.
+This is in mercator projection.
+ttl_p__ is the layer name for total pounds of nutrient, for the whole year
+
+```{r}
+
+if(!file.exists(here("cropped_rasters", "outfall_nitrogen.tif"))){
+  # Read in nitrogen and phosphorous outfall data:
+  outfall_n <- st_read(here("data", "outfall_data"), layer = "outfall_nitrogen") %>% 
+    dplyr::select(ttl_p__)
+  outfall_p <- st_read(here("data", "outfall_data"), layer = "outfall_phosphorous") %>% 
+    dplyr::select(ttl_p__)
+  # Reproject these data to WGS84:
+  out_n_reproj <- st_transform(outfall_n, proj)
+  out_p_reproj <- st_transform(outfall_p, proj)
+  # Turn them into rasters:
+  out_n_raster <- rasterize(out_n_reproj, x, fun = sum)
+  out_p_raster <- rasterize(out_p_reproj, x, fun = sum)
+  # Crop and mask them to the US EEZ
+  out_n_mask <- mask_fx(out_n_raster)
+  out_p_mask <- mask_fx(out_p_raster)
+  # Save the cropped rasters:
+  writeRaster(out_n_mask, here("cropped_rasters", "outfall_nitrogen.tif"), overwrite = TRUE)
+  writeRaster(out_p_mask, here("cropped_rasters", "outfall_phosphorous.tif"), overwrite = TRUE)
+}
+
+```
+
+## Deposition rates
+
+These data are from the World Ocean Database.
+
+But these kinda suck.
+```{r}
+# 
+# phos_obs_2017 <- read_csv(here("data", "WOD_csv", "phos_std_2017.csv"))
+# 
+# phos_2017_sf <- st_as_sf(phos_obs_2017, coords = c("Latitude", "Longitude"))
+```
+
+
+What about NOAA's data from 1993?
+
+These are in a 5 degree by 3.75 degree grid...aka pretty terrible. 
+also...not projected. But this is the industry standard dataset...
+Units are `mg N/m2/yr`
+
+```{r}
+if(!file.exists(here("cropped_rasters", "nit_dep_1993.tif"))){
+  # Read in
+  nit_dep_1993 <- raster(here("data", "anthro_nit_from_noaa", "N-deposition1993.tif"))
+  # Set the crs to WGS84
+  crs(nit_dep_1993) <- proj
+  # Is this the right CRS? I Don't Know!
+  plot(nit_dep_1993)
+  # To make sure I'm projecting this right, I'm going to first create a raster with the intended resolution and projection...
+  dep_raster <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, res= c(5, 3.75), crs= proj)
+  # Then, project the original raster to the correct grid
+  nit_1993_b <- projectRaster(nit_dep_1993, dep_raster)
+  # Check to make sure this works
+  plot(nit_1993_b)
+  plot(US_crop, add = TRUE)
+  # Then mask it to our AOI.
+  nit_1993_crop <- mask_fx(nit_1993_b)
+  # And save it:
+  writeRaster(nit_1993_crop, here("cropped_rasters", "nit_dep_1993.tif"))
+}
+```
+
+### Ocean Acidification: 
+
+```{r}
+
+arag <- brick(here("data", "NOAA aragonite saturation statte", "Aragonite.nc"), varname = "Aragonite")
+
+plot(arag)
+
+
+
+
+plot(arag)
+crs(arag)
+```
+
+### Seaweed shapefiles
+
+These are calculated seaweed distributions from...Ilan?
+At least from emlab
+
+```{r}
+
+eucheuma <- read_sf(here("data", "distribution-shapefiles"), layer = "Eucheuma")
+gracilaria <- read_sf(here("data", "distribution-shapefiles"), layer = "Gracilaria")
+kappaphycus <- read_sf(here("data", "distribution-shapefiles"), layer = "Kappaphycus")
+macrocystis <- read_sf(here("data", "distribution-shapefiles"), layer = "Macrocystis")
+pyropia <- read_sf(here("data", "distribution-shapefiles"), layer = "Pyropia")
+saccharina <- read_sf(here("data", "distribution-shapefiles"), layer = "Saccharina")
+sargassum <- read_sf(here("data", "distribution-shapefiles"), layer = "Sargassum")
+ulva <- read_sf(here("data", "distribution-shapefiles"), layer = "Ulva")
+undaria <- read_sf(here("data", "distribution-shapefiles"), layer = "Undaria")
+
+plot(gracilaria)
+
+
+
+plot(eucheuma)
+
 ```
 

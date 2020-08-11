@@ -1,0 +1,47 @@
+---
+title: "Summary Overview"
+author: "Gabriel De La Rosa"
+date: "7/30/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(here)
+```
+
+## Seaweed Aquacuture for Pollution Remediation
+### Current progress and future goals
+
+##### Pollution Hotspots
+
+The first step of our analysis is to identify coastal zones in the US where anthropogenic nutrients are the driving nutrient in the area. 
+
+So far, I've mocked up some rudimentary maps that show pollution "hotspots" in the US. I intersected ocean N and P nutrient levels (BioOracle data) with fertilizer plumes from rivers (Ocean Health Index data, in relative intensity), and then overlaid points where eutrophication or hypoxia has been documented (World Ocean Index compiled dataset).
+
+For now, I've done this analysis at 0.2 degree resolution, mainly because its far easier to visualize than the 5 arcsec resolution of the BioOracle data.
+
+##### Low nutrient, high fertilizer suitability map. Red squares are points of documented eutrophication/hypoxia.
+
+![Low nutrient levels, high fertilizer, eutrophication](`r here("map_img", "BO_low.png")`)
+
+
+And, I'm currently in the process of comparing these results to AnnaClaire's suitability for the gulf, but viewing the images side by side gives a good comparison.
+
+![Hotspots cropped to the Gulf](`r here("map_img", "BO_gulf_low.png")`)
+
+![Gulf Seaweed Suitable Area](`r here("map_img", "seaweed_gen_suitable.png")`)
+
+The nutrient layer cuts off the Western half of the gulf. There are documented eutrophic areas and fertilizer plumes here, too, which are being left out from the nutrient layer. I'm currently in the process of making a more precise hotspot map, as outlined below: 
+
+## Next Steps
+
+While a nice preliminary visualization, this analysis doesn't accurately capture anthropogenic nutrient loading to any particular zone. I'm currently working through creating layers that estimate:
+
+* riverine fertilizer loading
+* atmospheric deposition
+* wastewater outfall loading 
+
+and plan to compare the estimated anthropogenic loads to total nutrients in a location. Once that's done, I'll overlay previously made seaweed species range maps for the US, repeat AC's seaweed suitability analysis for the entire US, and then calculate estimated nutrient uptake for each species. 
+
+I'm also thinking about adding an ocean acidification layer, though seaweed's potential to remediate acidification is still disputed. Also, I'll highlight which states have existing pollution markets.
