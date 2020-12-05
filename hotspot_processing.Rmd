@@ -451,6 +451,8 @@ At least from emlab
 
 ```{r}
 
+
+# Read in all the seaweed distributions:
 eucheuma <- read_sf(here("data", "distribution-shapefiles"), layer = "Eucheuma")
 gracilaria <- read_sf(here("data", "distribution-shapefiles"), layer = "Gracilaria")
 kappaphycus <- read_sf(here("data", "distribution-shapefiles"), layer = "Kappaphycus")
@@ -460,12 +462,17 @@ saccharina <- read_sf(here("data", "distribution-shapefiles"), layer = "Sacchari
 sargassum <- read_sf(here("data", "distribution-shapefiles"), layer = "Sargassum")
 ulva <- read_sf(here("data", "distribution-shapefiles"), layer = "Ulva")
 undaria <- read_sf(here("data", "distribution-shapefiles"), layer = "Undaria")
+# Combine these all in a data frame:
+sp_dist <- rbind(eucheuma, gracilaria, kappaphycus, macrocystis, pyropia, saccharina, sargassum, ulva, undaria)
+# Project it to our crs:
+sp_dist_tsfm <- st_transform(sp_dist, proj)
+# Crop to the US EEZ:
+sp_dist_crop <- st_crop(sp_dist, us_eez)
+# then mask it to the US EEZ:
+sp_dist_int <- st_intersection(sp_dist, us_eez)
 
-plot(gracilaria)
+plot(sp_dist_int)
 
-
-
-plot(eucheuma)
 
 ```
 
