@@ -17,8 +17,9 @@ library(rgdal)
 library(janitor)
 ```
 
-## Exploring outfall data from NOAA:
+# This rmarkdown combines two datasets: NPDES facility discharge data from the EPA, and outfall locations from NOAA.
 
+### Read in outfall shapefiles
 ```{r}
 # See what layers the gdb file has...surprise, its just one.
 ogrListLayers(here("data", "outfall_data", "WastewaterOutfalls.gdb"))
@@ -29,7 +30,9 @@ outfalls <- st_read(here("data", "outfall_data", "WastewaterOutfalls.gdb"), laye
 outfalls
 ```
 
-# Read in discharge data from the EPA
+### Read in discharge data from the EPA
+
+For nitrogen:
 ```{r}
 # Read this in and select the discharge data. The permit number matches one in the oufall dataset, so we keep that too.
 n_discharge <- read_csv(here("data", "outfall_data", "2020_discharge_data_epa.csv"), skip = 3) %>% 
@@ -43,6 +46,7 @@ n_discharge_num <- n_discharge %>%
   mutate(max_concentration_mg_l = as.numeric(max_concentration_mg_l))
 ```
 
+For phosphorous:
 ```{r}
 p_discharge = read_csv(here("data", "outfall_data", "2020_phosphorous_epa.csv"), skip = 3) %>% 
   clean_names() %>% 
@@ -55,12 +59,10 @@ p_discharge_num <- p_discharge %>%
   mutate(max_concentration_mg_l = as.numeric(max_concentration_mg_l))
 ```
 
-# Join this with outfall data:
-
+### Join this with outfall location by the NPDES number:
 ```{r}
 # Join the discharge amounts to the outfall sf with geometry
 outfall_n_join <- inner_join(outfalls, n_discharge_num, by = c("PGM_SYS_ID" = "npdes_permit_number"))
-
 outfall_p_join <- inner_join(outfalls, p_discharge_num, by = c("PGM_SYS_ID" = "npdes_permit_number"))
 
 # Save this file for later use.
@@ -68,6 +70,7 @@ st_write(outfall_n_join, dsn = here("data", "outfall_data", "outfall_nitrogen.sh
 st_write(outfall_p_join, dsn = here("data", "outfall_data", "outfall_phosphorous.shp"), overwrite = TRUE, append = FALSE)
 ```
 
+### Save em
 ``` {r}
 write_csv(outfall_n_join, here("data", "outfall_data", "outfall_n.csv"))
 write_csv(outfall_p_join, here("data", "outfall_data", "outfall_p.csv"))
