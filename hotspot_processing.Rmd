@@ -1,9 +1,21 @@
 ---
-title: "data_exploration"
+title: "hotspot_processing"
 author: "Gabriel De La Rosa"
 date: "7/1/2020"
 output: html_document
 ---
+
+# This R Markdown processes files for the preliminary analysis presented early in the summer. 
+
+## The layers processed here include:
+ 
+* Eutrophication and hypoxia data from WOI
+* OHI Nutrient Data - relative intensity of fertilizer pollution globally
+* Nitrate & Phosphate from Halley's paper.
+* Bio Oracle Nitrate & Phosphate
+* Sewage Outfall Data
+
+## The outputs from this document are all included in the cropped_rasters folder.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -19,6 +31,12 @@ library(rnaturalearthdata)
 library(rnaturalearthhires)
 library(rgeos)
 library(gstat)
+library(doParallel)
+library(rgis)
+library(snow)
+
+
+rasterOptions(maxmemory = 1e10, progress = "text")
 ```
 
 ### Set Projections and base rasters:
@@ -28,48 +46,55 @@ proj <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
 
 # This is a 0.2 degree resolution raster for the whole globe...
 x <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, res=0.2, crs= proj)
-
 ```
 
 
-```{r}
-# This is a function to crop and mask a raster to the US EEZ.
-mask_fx <- function(object, shp = us_eez){
-  cropped <- raster::crop(object, shp)
-  raster <- raster::rasterize(shp, cropped, getCover = TRUE)
-  raster[raster == 0] <- NA
-  mask <- raster::mask(cropped, raster)
-  return(mask)
-}
-```
-
-
-### Create Area of Interest: US Mainland EEZ
-
+### Create Area of Interest: US  EEZ
 ``` {r}
-if(!file.exists(here("cropped_rasters", "us_eez.shp"))){
+if(!file.exists(here("cropped_rasters", "us_eez_ak_hi.shp"))){
   # Read in eez data. This is already in the proper projection.
   eez <- read_sf(here("data", "World_EEZ_v11_20191118"), layer = "eez_v11")
   
   # Filter it down
   us_eez <- eez %>% 
-    filter(SOVEREIGN1 == "United States") %>% 
-    filter(TERRITORY1 == "United States") %>% 
+    filter(TERRITORY1 %in% c("United States")) %>%
     filter(MRGID == "8456") %>% 
     dplyr::select(TERRITORY1)
   
+  ak_eez <- eez %>% 
+    filter(TERRITORY1 %in% c("Alaska")) %>% 
+    dplyr::select(TERRITORY1)
+          
+  hi_eez <- eez %>% 
+    filter(TERRITORY1 %in% c("Hawaii")) %>% 
+    dplyr::select(TERRITORY1)
+  
+  
   # Save just the US...
   sf::write_sf(us_eez, here("cropped_rasters", "us_eez.shp"))
+  sf::write_sf(ak_eez, here("cropped_rasters", "ak_eez.shp"))
+  sf::write_sf(hi_eez, here("cropped_rasters", "hi_eez.shp"))
 }
   
 # We can read in our processed files here to save time later:
 us_eez <- read_sf(here("cropped_rasters"), layer = "us_eez")
-
-# Convert this to an sp df...do I need this?
-us_sp <- as(us_eez, 'Spatial')
+ak_eez <- read_sf(here("cropped_rasters"), layer = "ak_eez")
+hi_eez <- read_sf(here("cropped_rasters"), layer = "hi_eez")
 ```
 
-US basemap and state lines:
+
+```{r}
+# Create a function to mask a raster to the US EEZ
+mask_fx <- function(object, shp = us_eez){
+  cropped <- raster::crop(object, shp)
+  raster <- raster::rasterize(shp, cropped, getCover = TRUE)
+  raster[raster == 0] <- NA
+  mask <- rgis::fast_mask(cropped, raster)
+  return(mask)
+}
+```
+
+### US basemap and state lines:
 ```{r}
 # Make a US basemap:
 
@@ -122,11 +147,13 @@ if(!file.exists(here("cropped_rasters", "US_hypox_rast.tif"))){
   ##------------
   ## Then, convert it to a raster
   ##------------
+  # reload in data:
+  eut_US <- read_sf(here("cropped_rasters"), layer = "US_hypox")
   # First, get rid of the improved locations:
   eut_current <- eut_US %>% 
-    filter(Classification %in% c("Hypoxic", "Eutrophic", "eutrophic")) %>% 
+    filter(HypxCrr %in% c("Hypoxic", "Eutrophic", "eutrophic")) %>% 
     dplyr::select(ID)
-  # Put this into a 1 degree grid...
+  # Put this into a 0.2 degree grid...
   eut_raster <- rasterize(eut_current, x, fun = 'count')
   # Crop it to the US EEZ...
   eut_us_mask <- mask_fx(eut_raster)
@@ -135,7 +162,7 @@ if(!file.exists(here("cropped_rasters", "US_hypox_rast.tif"))){
 }
 
 
-# Mask removes cells that don't have a centroid in the EEZ. This isn't good...
+
 eut_us_mask <- raster(here("cropped_rasters", "US_hypox_rast.tif"))
 
 
@@ -156,8 +183,29 @@ if(!file.exists(here("cropped_rasters", "OHI_nutrient_pollution_reproject.tif"))
   nut_raw <- raster(here("data", "ohi_2013", "nutrient_pollution_2013_raw.tif"))
   # Convert the EEZ projection to Mollewide...
   us_eez_moll <- st_transform(us_eez, crs(nut_raw))
+  ak_eez_moll <- st_transform(ak_eez, crs(nut_raw))
+  hi_eez_moll <- st_transform(ak_eez, crs(nut_raw))
   # Crop the raster to US bounding box
-  nut_crop <- mask_fx(nut_raw, us_eez_moll)
+  nut_crop_us <- mask_fx(nut_raw, us_eez_moll) ## I finished this
+  writeRaster(nut_crop_us, here("temp_rasters", "nut_mask_us.tif"))
+  nut_crop_hi <- mask_fx(nut_raw, hi_eez_moll) #@ I finished this...
+  writeRaster(nut_crop_hi, here("temp_rasters", "nut_mask_hi.tif"))
+  
+  ## ---------------
+  ## ---------------
+  #### I'm here
+  ## ---------------
+  ## ---------------
+  beginCluster(detectCores() - 1)
+  nut_crop_ak <- mask_fx(nut_raw, ak_eez_moll)
+  endCluster()
+  
+  nut_reproj_us <- projectRaster(nut_crop_us, crs = proj, progress = "text")
+  nut_reproj_hi <- projectRaster(nut_crop_hi, crs = proj, progress = "text")
+  nut_reproj_ak <- projectRaster(nut_crop_ak, crs = proj, progress = "text")
+  
+  plot(us_eez_moll)
+  
   # Then, save the masked raster
   raster::writeRaster(nut_mask, here("cropped_rasters", "nut_mask.tif"))
   # Read this in again...
@@ -388,20 +436,12 @@ if(!file.exists(here("cropped_rasters", "outfall_nitrogen.tif"))){
 
 ```
 
+
+# The following layers are unused in the preliminary analysis and were added later.
+
 ## Deposition rates
 
-These data are from the World Ocean Database.
-
-But these kinda suck.
-```{r}
-# 
-# phos_obs_2017 <- read_csv(here("data", "WOD_csv", "phos_std_2017.csv"))
-# 
-# phos_2017_sf <- st_as_sf(phos_obs_2017, coords = c("Latitude", "Longitude"))
-```
-
-
-What about NOAA's data from 1993?
+NOAA's data from 1993?
 
 These are in a 5 degree by 3.75 degree grid...aka pretty terrible. 
 also...not projected. But this is the industry standard dataset...
@@ -436,22 +476,14 @@ if(!file.exists(here("cropped_rasters", "nit_dep_1993.tif"))){
 arag <- brick(here("data", "NOAA aragonite saturation statte", "Aragonite.nc"), varname = "Aragonite")
 
 plot(arag)
-
-
-
-
-plot(arag)
-crs(arag)
 ```
 
 ### Seaweed shapefiles
 
-These are calculated seaweed distributions from...Ilan?
+These are calculated seaweed distributions from...Ilan? Ian?
 At least from emlab
 
 ```{r}
-
-
 # Read in all the seaweed distributions:
 eucheuma <- read_sf(here("data", "distribution-shapefiles"), layer = "Eucheuma")
 gracilaria <- read_sf(here("data", "distribution-shapefiles"), layer = "Gracilaria")
@@ -471,8 +503,8 @@ sp_dist_crop <- st_crop(sp_dist, us_eez)
 # then mask it to the US EEZ:
 sp_dist_int <- st_intersection(sp_dist, us_eez)
 
-plot(sp_dist_int)
+sp_dist_int_ak <- st_intersection(sp_dist, ak_eez)
 
-
+sp_dist_int_hi <- st_intersection
 ```
 
